@@ -1,0 +1,34 @@
+version: "2.2"
+services:
+    proxy:
+        image: alpine/socat:latest
+        container_name: qualys-docker-proxy
+        restart: always
+        command: tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
+        networks:
+            - dockersock
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+    instrumenter:
+        image: qualys/crs-instrumenter:${CRS_INSTRUMENTER_TAG:-latest}
+        container_name: qualys-crs-instrumenter
+        environment: 
+            DOCKER_HOST: 'tcp://qualys-docker-proxy:2375'
+            LI_MQURL: qas://${QUALYS_GATEWAY_ENDPOINT} # set the username password and qualys endpoint for instrumenter in env or directly to this file
+
+            # VAULT CONFIG Change these settings if you have your own vault
+            # LI_VAULT_SECRET_ENGINE: "kv-v2"
+            # LI_VAULT_DATA_VALUES_BASE64: "false"
+            # LI_VAULTPATH: "${USER_VAULT_PATH}"
+            # LI_VAULT_TOKEN: "${VAULT_TOKEN}"
+            # LI_VAULT_ADDRESS: "http://vault:8200"
+
+            # PROXY SETTINGS (Please uncomment and fill required values for proxy)
+            # LI_ALLOWHTTPPROXY: true
+            # https_proxy: http://squid:3128
+            # LI_MQSKIPVERIFYTLS: true
+        networks:
+            - dockersock
+networks:
+    dockersock:
+        driver: bridge
