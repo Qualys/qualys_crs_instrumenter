@@ -1,0 +1,126 @@
+---
+# Namespace for the deployment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qualys
+---
+# Network for instrumenter
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: qualys
+  name: dockersock
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          io.network/dockersock: "true"
+  podSelector:
+    matchLabels:
+      io.network/dockersock: "true"
+---
+# Proxy deployment to provide docker.sock as DOCKER_HOST to instrumenter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: qualys
+  labels:
+    io.service: proxy
+  name: qualys-docker-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.service: proxy
+  template:
+    metadata:
+      labels:
+        io.network/dockersock: "true"
+        io.service: proxy
+    spec:
+      containers:
+      - args:
+        - tcp-listen:2375,fork,reuseaddr
+        - unix-connect:/var/run/docker.sock
+        image: alpine/socat:latest
+        imagePullPolicy: "IfNotPresent"
+        name: proxy
+        ports:
+          - containerPort: 2375
+        volumeMounts:
+          - name: dockersock
+            mountPath: "/var/run/docker.sock"
+      restartPolicy: Always
+      volumes:
+        - name: dockersock
+          hostPath:
+            path: /var/run/docker.sock
+---
+# Proxy Service to expose port for instrumenter
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: qualys
+  labels:
+    io.service: proxy
+  name: qualys-docker-proxy
+spec:
+  ports:
+  - name: "2375"
+    port: 2375
+    targetPort: 2375
+  selector:
+    io.service: proxy
+---
+# Instrumenter deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: qualys
+  labels:
+    io.service: instrumenter
+  name: qualys-crs-instrumenter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.service: instrumenter
+  template:
+    metadata:
+      labels:
+        io.network/dockersock: "true"
+        io.service: instrumenter
+    spec:
+      containers:
+      - env:
+        - name: DOCKER_HOST
+          value: tcp://qualys-docker-proxy:2375
+        - name: LI_MQURL
+          value: qas://{{QUALYS_GATEWAY_ENDPOINT}} # Enter the username password of crs and qualys instrumenter pod endpoint
+
+        # VAULT CONFIG Change these settings if you have your own vault
+        # - name: LI_VAULTPATH
+        #   value: /secret/data/qgsuser # Enter your Path where the Vault creds resides
+        # - name: LI_VAULT_ADDRESS
+        #   value: http://vault:8200   # Change this if you have your own vault
+        # - name: LI_VAULT_DATA_VALUES_BASE64
+        #   value: "false"             # Change this if you store base64 version of creds in vault
+        # - name: LI_VAULT_SECRET_ENGINE
+        #   value: kv-v2               # Set the version of vault engine you use
+        # - name: LI_VAULT_TOKEN
+        #   value: {{VAULT_TOKEN}}     # Set the vault token you use
+
+
+        # proxy settings (Uncomment this if you want have a proxy in your docker host)
+        # - name: LI_ALLOWHTTPPROXY
+        #   value: true
+        # - name: https_proxy
+        #   value: http://proxy:3128
+        # - name: LI_MQSKIPVERIFYTLS
+        #   value: true
+        image: qualys/crs-instrumenter:latest
+        imagePullPolicy: "IfNotPresent"
+        name: instrumenter
+      restartPolicy: Always
