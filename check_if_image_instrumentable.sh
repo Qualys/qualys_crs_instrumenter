@@ -93,7 +93,7 @@ supported_centos_libc=(glibc-2.26-33.amzn2.0.1.x86_64.rpm* glibc-2.26-33.amzn2.0
 # Get OS details
 echo -e 
 echo "OS Details for $image -"
-echo $(docker run -i --rm $image /bin/cat /etc/os-release)
+echo $(docker run -i --rm  --user 0 --entrypoint=/bin/cat $image /etc/os-release)
 echo -e
 
 echo "Checking if $image instrumentable -"
