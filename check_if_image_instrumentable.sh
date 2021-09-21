@@ -93,13 +93,22 @@ supported_centos_libc=(glibc-2.26-33.amzn2.0.1.x86_64.rpm* glibc-2.26-33.amzn2.0
 # Get OS details
 echo -e 
 echo "OS Details for $image -"
-echo $(docker run -i --rm $image /bin/cat /etc/os-release)
+#echo $(docker run -i --rm $image /bin/cat /etc/os-release)
+containrid=$(docker create $image)
+#echo $containrid
+var=$(docker cp  --follow-link $containrid:/etc/os-release os-file)
+os=$(cat ./os-file)
+rm -f ./os-file
+
+echo $os
+
 echo -e
 
 echo "Checking if $image instrumentable -"
 echo -e
 
 # Check if RPM based package
+if [[ "$os" =~ "centos" || "$os" =~ "fedora" ]]; then
     docker run -i --rm --user 0 --entrypoint=/bin/rpm $image rpm -q glibc
     result=$?
     if [ $result -eq 0 ]; then
@@ -110,8 +119,9 @@ echo -e
             else
                 echo Result : $image instrumentation not supported
             fi
-    else
+    fi
 # Check if dpkg based package
+elif [[ "$os" =~ "ubuntu" ]]; then
         docker run -i --rm  --user 0 --entrypoint=/usr/bin/dpkg $image -s libc6
         result=$?
         if [ $result -eq 0 ]; then
@@ -124,12 +134,58 @@ echo -e
             else
                 echo Result : $image instrumentation not supported
             fi
-        else
+       fi
+elif [[ "$os" =~ "debian" ]]; then
+# check for debian/distroless images
+	if [[ "$os" =~ "distroless" ]]; then
+		docker cp --follow-link $containrid:/var/lib/dpkg/status.d/libc6 ./testlibc
+		result=$?
+		if [ $result -eq 0 ]; then
+			libc_package=$(cat ./testlibc | grep Version  | awk -F: '{print $2}')
+			rm -f ./testlibc
+			libc_package=$(echo $libc_package)
+			echo libc_package : $libc_package
+		        if [[ "${supported_libc[@]}" =~ .*"${libc_package}".* ]]; then
+				echo Result : $image can be instrumented
+		        else
+				echo Result : $image instrumentation not supported
+			fi
+		else
+			docker cp --follow-link $containrid:/var/lib/dpkg/status.d/bGliYzY= ./testlibc
+			result=$?
+			if [ $result -eq 0 ]; then
+				libc_package=$(cat ./testlibc | grep Version  | awk -F: '{print $2}')
+				rm -f ./testlibc
+				libc_package=$(echo $libc_package)
+				echo libc_package : $libc_package
+			        if [[ "${supported_libc[@]}" =~ .*"${libc_package}".* ]]; then
+					echo Result : $image can be instrumented
+			        else
+					echo Result : $image instrumentation not supported
+				fi
+			fi
+		fi
+	else
+	        docker run -i --rm  --user 0 --entrypoint=/usr/bin/dpkg $image -s libc6
+		result=$?
+	        if [ $result -eq 0 ]; then
+			libc_package=$(docker run -i --rm  --user 0 --entrypoint=/usr/bin/dpkg \
+						$image -s libc6 | grep Version  | awk -F: '{print $2}')
+			libc_package=$(echo $libc_package)
+			echo libc_package : $libc_package
+			if [[ "${supported_libc[@]}" =~ .*"${libc_package}".* ]]; then
+				echo Result : $image can be instrumented
+			else
+				echo Result : $image instrumentation not supported
+			fi
+		fi
+	fi
+elif [[ "$os" =~ "alpine" ]]; then
 # Check if musl based package
             docker run -i --rm  --user 0 --entrypoint=/sbin/apk $image version musl
             result=$?
             if [ $result -eq 0 ]; then
-                musl_package=$(docker run -i --rm  --user 0 --entrypoint=/sbin/apk $image version musl | grep musl- | awk -F' ' '{print $1}')
+                musl_package=$(docker run -i --rm  --user 0 --entrypoint=/sbin/apk $image version musl 2>/dev/null | grep musl- | awk -F' ' '{print $1}')
                 musl_package=$(echo $musl_package)
                 echo "musl package" : $musl_package
                 if [[ "${supported_libc[@]}" =~ .*"${musl_package}".* ]]; then
@@ -137,10 +193,9 @@ echo -e
                 else
                     echo Result : $image instrumentation not supported
                 fi
-            else
-                # cannot be instrumented
-                echo Result : Unable to detect the libc package for $image , Instrumentation not supported
             fi
-        fi
-    fi
+else
+	echo "Results : Unsupported OS"
+fi
 
+var=$(docker rm -f $containrid)
