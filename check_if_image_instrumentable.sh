@@ -86,20 +86,29 @@ fi
 
 
 # supported libc versions
-supported_libc=(glibc-2.26-33.amzn2.0.1.x86_64.rpm* glibc-2.26-33.amzn2.0.2.x86_64.rpm* libc-bin_2.19-0ubuntu6.13_amd64.deb* libc-bin_2.19-0ubuntu6.14_amd64.deb* libc-bin_2.19-0ubuntu6.15_amd64.deb* libc-bin_2.19-0ubuntu6.6_amd64.deb* libc-bin_2.19-0ubuntu6.7_amd64.deb* libc-bin_2.19-0ubuntu6.9_amd64.deb* libc-bin_2.19-18+deb8u10_amd64.deb* libc-bin_2.19-18+deb8u6_amd64.deb* libc-bin_2.19-18+deb8u7_amd64.deb* libc-bin_2.23-0ubuntu10_amd64.deb* libc-bin_2.23-0ubuntu11_amd64.deb* libc-bin_2.24-11+deb9u1_amd64.deb* libc-bin_2.24-11+deb9u3_amd64.deb* libc-bin_2.24-11+deb9u4_amd64.deb* libc-bin_2.27-3ubuntu1_amd64.deb* libc-bin_2.27-3ubuntu1.4_amd64.deb* musl-1.1.15-r8.apk* musl-1.1.16-r14.apk* musl-1.1.16-r15.apk* musl-1.1.18-r2.apk* musl-1.1.18-r3.apk* musl-1.1.19-r10.apk* musl-1.1.20-r3.apk* musl-1.1.20-r4.apk* musl-1.1.22-r3.apk* musl-1.1.24-r3.apk* musl-1.1.24-r9.apk* musl-1.1.24-r10.apk*)
+supported_libc=(glibc-2.26-33.amzn2.0.1.x86_64.rpm* glibc-2.26-33.amzn2.0.2.x86_64.rpm* libc-bin_2.19-0ubuntu6.13_amd64.deb* libc-bin_2.19-0ubuntu6.14_amd64.deb* libc-bin_2.19-0ubuntu6.15_amd64.deb* libc-bin_2.19-0ubuntu6.6_amd64.deb* libc-bin_2.19-0ubuntu6.7_amd64.deb* libc-bin_2.19-0ubuntu6.9_amd64.deb* libc-bin_2.19-18+deb8u10_amd64.deb* libc-bin_2.19-18+deb8u6_amd64.deb* libc-bin_2.19-18+deb8u7_amd64.deb* libc-bin_2.23-0ubuntu10_amd64.deb* libc-bin_2.28-10.deb* libc-bin_2.23-0ubuntu11_amd64.deb* libc-bin_2.24-11+deb9u1_amd64.deb* libc-bin_2.24-11+deb9u3_amd64.deb* libc-bin_2.24-11+deb9u4_amd64.deb* libc-bin_2.27-3ubuntu1_amd64.deb* libc-bin_2.27-3ubuntu1.4_amd64.deb* libc-bin_2.27-3ubuntu1.2_amd64.deb* libc-bin_2.27-3ubuntu1.3_amd64.deb* musl-1.1.15-r8.apk* musl-1.1.16-r14.apk* musl-1.1.16-r15.apk* musl-1.1.18-r2.apk* musl-1.1.18-r3.apk* musl-1.1.19-r10.apk* musl-1.1.20-r3.apk* musl-1.1.20-r4.apk* musl-1.1.22-r3.apk* musl-1.1.24-r3.apk* musl-1.1.24-r9.apk* musl-1.1.24-r10.apk* musl-1.2.2-r0.apk*)
 
 supported_centos_libc=(glibc-2.26-33.amzn2.0.1.x86_64.rpm* glibc-2.26-33.amzn2.0.2.x86_64.rpm* glibc-2.17-307.el7.1.x86_64.rpm glibc-2.28-72.el8.x86_64.rpm glibc-2.17-106.el7.x86_64.rpm glibc-2.26-32.amzn2.0.2.x86_64.rpm glibc-2.26-32.amzn2.0.1.x86_64.rpm glibc-2.17-292.el7.x86_64.rpm glibc-2.17-260.el7_6.6.x86_64.rpm glibc-2.17-222.el7.x86_64.rpm glibc-2.17-260.el7.x86_64.rpm glibc-2.17-260.el7_6.3.x86_64.rpm glibc-2.17-196.el7_4.2.x86_64.rpm glibc-2.17-196.el7.x86_64.rpm glibc-2.17-157.el7_3.1.x86_64.rpm glibc-2.17-106.el7_2.8.x86_64.rpm)
 
 # Get OS details
 echo -e 
 echo "OS Details for $image -"
-echo $(docker run -i --rm $image /bin/cat /etc/os-release)
+#echo $(docker run -i --rm $image /bin/cat /etc/os-release)
+containrid=$(docker create $image)
+#echo $containrid
+var=$(docker cp  --follow-link $containrid:/etc/os-release os-file)
+os=$(cat ./os-file)
+rm -f ./os-file
+
+echo $os
+
 echo -e
 
 echo "Checking if $image instrumentable -"
 echo -e
 
 # Check if RPM based package
+if [[ "$os" =~ "centos" || "$os" =~ "fedora" ]]; then
     docker run -i --rm --user 0 --entrypoint=/bin/rpm $image rpm -q glibc
     result=$?
     if [ $result -eq 0 ]; then
@@ -110,8 +119,9 @@ echo -e
             else
                 echo Result : $image instrumentation not supported
             fi
-    else
+    fi
 # Check if dpkg based package
+elif [[ "$os" =~ "ubuntu" ]]; then
         docker run -i --rm  --user 0 --entrypoint=/usr/bin/dpkg $image -s libc6
         result=$?
         if [ $result -eq 0 ]; then
@@ -124,12 +134,58 @@ echo -e
             else
                 echo Result : $image instrumentation not supported
             fi
-        else
+       fi
+elif [[ "$os" =~ "debian" ]]; then
+# check for debian/distroless images
+	if [[ "$os" =~ "distroless" ]]; then
+		docker cp --follow-link $containrid:/var/lib/dpkg/status.d/libc6 ./testlibc
+		result=$?
+		if [ $result -eq 0 ]; then
+			libc_package=$(cat ./testlibc | grep Version  | awk -F: '{print $2}')
+			rm -f ./testlibc
+			libc_package=$(echo $libc_package)
+			echo libc_package : $libc_package
+		        if [[ "${supported_libc[@]}" =~ .*"${libc_package}".* ]]; then
+				echo Result : $image can be instrumented
+		        else
+				echo Result : $image instrumentation not supported
+			fi
+		else
+			docker cp --follow-link $containrid:/var/lib/dpkg/status.d/bGliYzY= ./testlibc
+			result=$?
+			if [ $result -eq 0 ]; then
+				libc_package=$(cat ./testlibc | grep Version  | awk -F: '{print $2}')
+				rm -f ./testlibc
+				libc_package=$(echo $libc_package)
+				echo libc_package : $libc_package
+			        if [[ "${supported_libc[@]}" =~ .*"${libc_package}".* ]]; then
+					echo Result : $image can be instrumented
+			        else
+					echo Result : $image instrumentation not supported
+				fi
+			fi
+		fi
+	else
+	        docker run -i --rm  --user 0 --entrypoint=/usr/bin/dpkg $image -s libc6
+		result=$?
+	        if [ $result -eq 0 ]; then
+			libc_package=$(docker run -i --rm  --user 0 --entrypoint=/usr/bin/dpkg \
+						$image -s libc6 | grep Version  | awk -F: '{print $2}')
+			libc_package=$(echo $libc_package)
+			echo libc_package : $libc_package
+			if [[ "${supported_libc[@]}" =~ .*"${libc_package}".* ]]; then
+				echo Result : $image can be instrumented
+			else
+				echo Result : $image instrumentation not supported
+			fi
+		fi
+	fi
+elif [[ "$os" =~ "alpine" ]]; then
 # Check if musl based package
             docker run -i --rm  --user 0 --entrypoint=/sbin/apk $image version musl
             result=$?
             if [ $result -eq 0 ]; then
-                musl_package=$(docker run -i --rm  --user 0 --entrypoint=/sbin/apk $image version musl | grep musl- | awk -F' ' '{print $1}')
+                musl_package=$(docker run -i --rm  --user 0 --entrypoint=/sbin/apk $image version musl 2>/dev/null | grep musl- | awk -F' ' '{print $1}')
                 musl_package=$(echo $musl_package)
                 echo "musl package" : $musl_package
                 if [[ "${supported_libc[@]}" =~ .*"${musl_package}".* ]]; then
@@ -137,10 +193,9 @@ echo -e
                 else
                     echo Result : $image instrumentation not supported
                 fi
-            else
-                # cannot be instrumented
-                echo Result : Unable to detect the libc package for $image , Instrumentation not supported
             fi
-        fi
-    fi
+else
+	echo "Results : Unsupported OS"
+fi
 
+var=$(docker rm -f $containrid)
